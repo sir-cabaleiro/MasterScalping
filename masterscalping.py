@@ -1,15 +1,9 @@
-import config, numpy, talib
-from os import system, name
+import websocket, json, pprint, talib, numpy
+import config
 from binance.client import Client
 from binance.enums import *
-import time
+from os import system, name 
 
-
-i = 0
-velas_open = []
-velas_high = []
-velas_low = []
-velas_close = []
 
 def clear(): 
     if name == 'nt': 
@@ -17,74 +11,56 @@ def clear():
     else: 
         _ = system('clear')
 
-def calculos():
-	rsi = talib.RSI(np_velas_close, 14)
-	williams = talib.WILLR(np_velas_high, np_velas_low, np_velas_close, timeperiod=14)
-	last_rsi = rsi[-1]
-	print("Precio actual: {}".format(np_velas_close[-1]))
-	print("El RSI está en  {}".format(last_rsi))
-	print("Minimo últimos 30 mins  {}".format(numpy.amin(velas_low)))
-	print("Williams %R")
-	print(williams[-1])
-	time.sleep(1)
+
+SOCKET = "wss://stream.binance.com:9443/ws/thetausdt@kline_1m"
+TRADE_SYMBOL = 'THETAUSDT'
+RSI_PERIOD = 14
+vela = []
+last_rsi = 1
+
+client = Client(config.API_KEY, config.API_SECRET, tld='com')
 
 
-# ///////      k0D€    \\\\\\\
+def on_open(ws):
+    print('conexión abierta')
 
-while True :
+def on_close(ws):
+    print('conexión cerrada')
+
+def on_message(ws, message):
+	global vela, last_rsi
+
+	json_message = json.loads(message)
+	contenido_mensaje = json_message['k']
+	cierre = contenido_mensaje['c']
+	vela_cerrada = contenido_mensaje['x']
+	clear()
+	print('Precio actual {}'.format(cierre))
+	print("Precio velas 1 minuto: ")
+	print(vela)
+	print("RSI: ")
+	print(last_rsi)
 	
-	client = Client(config.API_KEY, config.API_SECRET, tld='com')
-	velas = client.get_historical_klines("THETAUSDT", Client.KLINE_INTERVAL_1MINUTE, "30 minutes ago UTC")
+
+	if vela_cerrada :
+		print('Vela cerrada en {}'.format(cierre))
+		vela.append(float(cierre))
+		print("Precio velas 1 minuto: ")
+		print(vela)
+		
+		if len(vela) > RSI_PERIOD :
+			np_vela = numpy.array(vela)
+			rsi = talib.RSI(np_vela, RSI_PERIOD)
+			print('Calculando RSI')
+			print(rsi)
+			last_rsi = int(rsi[-1])
+			print("el RSI esta en  {}".format(last_rsi))
+			fastk, fastd = talib.STOCHRSI(close, timeperiod=14, fastk_period=7, fastd_period=10)
+			pprint(fastk)
+			pprint(fastd)
+
+		
 
 
-	while i < len(velas):
-
-		i = i + 1
-
-	np_velas_open = numpy.array(velas_open)
-	np_velas_high = numpy.array(velas_high)
-	np_velas_low = numpy.array(velas_low)
-	np_velas_close = numpy.array(velas_close)
-	np_vela = numpy.array(velas[i])
-# print(np_vela[1] + " Open")
-		velas_open.append(float(np_vela[1]))
-# print(np_vela[2] + " High")
-		velas_high.append(float(np_vela[2]))
-# print(np_vela[3] + " Low")
-		velas_low.append(float(np_vela[3]))
-# print(np_vela[4] + " Close")
-		velas_close.append(float(np_vela[4]))
-
-# print("OPENs:")
-# print(np_velas_open)
-# print("LOWs:")
-# print(np_velas_low)
-# print("HIGHs:")
-# print(np_velas_high)
-# print("CLOSEs:")
-# print(np_velas_close)
-
-	calculos()
-
-
-
-
-
-
-
-
-
-
-
-# fastk, fastd = talib.STOCHRSI(np_velas_close, timeperiod=14, fastk_period=7, fastd_period=10, fastd_matype=0)
-# fastk, fastd = talib.STOCH(np_velas_high, np_velas_low, np_velas_close, fastk_period=7, slowk_period=7, slowk_matype=0, slowd_period=10, slowd_matype=0)
-# fastk, fastd = talib.STOCHF(np_velas_high, np_velas_low, np_velas_close, fastk_period=7, fastd_period=10, fastd_matype=0)
-# last_fastk = fastk[-1]
-# last_fastd = fastd[-1]
-# print(last_fastk)
-# print(last_fastd)
-
-
-
-
-
+ws = websocket.WebSocketApp(SOCKET, on_open=on_open, on_close=on_close, on_message=on_message)
+ws.run_forever()
